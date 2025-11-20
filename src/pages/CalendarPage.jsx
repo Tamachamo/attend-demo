@@ -9,17 +9,27 @@ export default function CalendarPage() {
   const [error, setError] = useState(null)
   const [events, setEvents] = useState([])
   const [leaves, setLeaves] = useState([])
+  const [days, setDays] = useState([])
 
-  const today = startOfToday()
-  const start = addDays(today, -3)
-  const end = addDays(today, 10)
-
+  // today / start / end は useEffect の中で一度だけ計算する
   useEffect(() => {
-    let mounted = true
+    let cancelled = false
+
     const load = async () => {
       setLoading(true)
       setError(null)
+
       try {
+        const today = startOfToday()
+        const start = addDays(today, -3)
+        const end = addDays(today, 10)
+
+        // 日付リストを state に保存（レンダーごとに再計算しない）
+        if (!cancelled) {
+          setDays(eachDayOfInterval({ start, end }))
+        }
+
+        // manual_events 取得
         const { data: ev, error: evErr } = await supabase
           .from('manual_events')
           .select('*')
@@ -29,6 +39,7 @@ export default function CalendarPage() {
 
         if (evErr) throw evErr
 
+        // leave_requests 取得
         const { data: lr, error: lrErr } = await supabase
           .from('leave_requests')
           .select('*')
@@ -38,29 +49,37 @@ export default function CalendarPage() {
 
         if (lrErr) throw lrErr
 
-        if (mounted) {
+        if (!cancelled) {
           setEvents(ev || [])
           setLeaves(lr || [])
         }
       } catch (err) {
         console.error('calendar load error', err)
-        if (mounted) setError(err.message)
+        if (!cancelled) {
+          setError(err.message)
+        }
       } finally {
-        if (mounted) setLoading(false)
+        if (!cancelled) {
+          setLoading(false)
+        }
       }
     }
+
     load()
+
     return () => {
-      mounted = false
+      cancelled = true
     }
-  }, [start, end])
+  }, [])
 
   if (loading) return <Loading />
 
-  const days = eachDayOfInterval({ start, end })
-
+  // events / leaves を日付ごとにまとめる
   const eventsByDate = groupByDate(events, (e) => e.start_at)
   const leavesByDate = groupByDate(leaves, (l) => l.date)
+
+  const today = startOfToday()
+  const todayKey = format(today, 'yyyy-MM-dd')
 
   return (
     <div>
@@ -92,6 +111,8 @@ export default function CalendarPage() {
             const dayEvents = eventsByDate[key] || []
             const dayLeaves = leavesByDate[key] || []
 
+            const isToday = key === todayKey
+
             return (
               <div
                 key={key}
@@ -100,22 +121,17 @@ export default function CalendarPage() {
                   border: '1px solid #e5e7eb',
                   padding: '0.6rem 0.7rem',
                   minHeight: '120px',
-                  backgroundColor:
-                    format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd')
-                      ? '#eff6ff'
-                      : '#ffffff',
+                  backgroundColor: isToday ? '#eff6ff' : '#ffffff',
                 }}
               >
                 <div
                   style={{
                     fontSize: '0.8rem',
                     marginBottom: '0.25rem',
-                    fontWeight:
-                      format(d, 'yyyy-MM-dd') === format(today, 'yyyy-MM-dd') ? 600 : 500,
+                    fontWeight: isToday ? 600 : 500,
                   }}
                 >
-                  {format(d, 'MM/dd')}（{'日月火水木金土'[d.getDay()]}
-                  ）
+                  {format(d, 'MM/dd')}（{'日月火水木金土'[d.getDay()]}）
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
                   {dayEvents.length === 0 && dayLeaves.length === 0 && (
