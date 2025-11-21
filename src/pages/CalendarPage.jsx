@@ -1,11 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import {
-  addDays,
-  eachDayOfInterval,
-  format,
-  startOfToday,
-} from 'date-fns'
+import { addDays, eachDayOfInterval, format, startOfToday } from 'date-fns'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 import Loading from '../components/Loading'
 import ErrorMessage from '../components/ErrorMessage'
 
@@ -25,6 +21,8 @@ const STATUS_LABELS = {
 }
 
 export default function CalendarPage() {
+  const { user } = useAuth()
+
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
@@ -38,6 +36,16 @@ export default function CalendarPage() {
   const [selectedDate, setSelectedDate] = useState(null)
   const [showModal, setShowModal] = useState(false)
 
+  // 予定登録フォーム
+  const [evDate, setEvDate] = useState(format(startOfToday(), 'yyyy-MM-dd'))
+  const [evStart, setEvStart] = useState('10:00')
+  const [evEnd, setEvEnd] = useState('11:00')
+  const [evTitle, setEvTitle] = useState('')
+  const [evDesc, setEvDesc] = useState('')
+
+  // 再読み込みトリガー
+  const [reloadKey, setReloadKey] = useState(0)
+
   useEffect(() => {
     let cancelled = false
 
@@ -46,7 +54,7 @@ export default function CalendarPage() {
       setError(null)
 
       try {
-        const base = addDays(startOfToday(), offset * 7)
+        const base = addDays(startOfToday(), offset * 7) // 週単位で前後
         const start = addDays(base, -3)
         const end = addDays(base, 10)
 
@@ -102,7 +110,7 @@ export default function CalendarPage() {
     return () => {
       cancelled = true
     }
-  }, [offset])
+  }, [offset, reloadKey])
 
   if (loading) return <Loading />
 
@@ -134,13 +142,46 @@ export default function CalendarPage() {
   const modalLeaves = selectedKey ? leavesByDate[selectedKey] || [] : []
   const modalAnns = selectedKey ? annsByDate[selectedKey] || [] : []
 
+  const handleEventSubmit = async (e) => {
+    e.preventDefault()
+    if (!user) return
+
+    try {
+      setError(null)
+
+      const startIso = `${evDate}T${evStart}:00`
+      const endIso = evEnd ? `${evDate}T${evEnd}:00` : null
+
+      const payload = {
+        user_id: user.id,
+        title: evTitle || '予定',
+        description: evDesc || null,
+        start_at: startIso,
+        end_at: endIso,
+      }
+
+      const { error: err } = await supabase.from('manual_events').insert(payload)
+      if (err) throw err
+
+      // 再読み込み
+      setReloadKey((v) => v + 1)
+
+      // ざっくりリセット
+      setEvTitle('')
+      setEvDesc('')
+    } catch (e2) {
+      console.error('manual_events insert error', e2)
+      setError(e2.message)
+    }
+  }
+
   return (
     <div>
       <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
         カレンダー（簡易タイムライン）
       </h2>
       <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.5rem' }}>
-        予定・申請・連絡事項を日付ごとに確認できます。
+        予定・申請・連絡事項を日付ごとに確認できます。日付をクリックすると詳細が開きます。
       </p>
 
       {/* 日付ナビ */}
@@ -153,31 +194,113 @@ export default function CalendarPage() {
           flexWrap: 'wrap',
         }}
       >
-        <button
-          type="button"
-          onClick={handlePrev}
-          style={navBtnStyle}
-        >
+        <button type="button" onClick={handlePrev} style={navBtnStyle}>
           ◀ 前へ（-1週）
         </button>
-        <button
-          type="button"
-          onClick={handleToday}
-          style={navBtnStyle}
-        >
+        <button type="button" onClick={handleToday} style={navBtnStyle}>
           今日へ
         </button>
-        <button
-          type="button"
-          onClick={handleNext}
-          style={navBtnStyle}
-        >
+        <button type="button" onClick={handleNext} style={navBtnStyle}>
           次へ（+1週）▶
         </button>
       </div>
 
       <ErrorMessage message={error} />
 
+      {/* 新規予定フォーム */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '0.75rem',
+          padding: '0.75rem',
+          marginBottom: '0.75rem',
+        }}
+      >
+        <h3
+          style={{
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            marginBottom: '0.5rem',
+          }}
+        >
+          新規予定登録
+        </h3>
+        <form
+          onSubmit={handleEventSubmit}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
+            gap: '0.75rem',
+            fontSize: '0.8rem',
+          }}
+        >
+          <div>
+            <label style={labelStyle}>日付</label>
+            <input
+              type="date"
+              value={evDate}
+              onChange={(e) => setEvDate(e.target.value)}
+              style={inputStyle}
+              required
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>開始</label>
+            <input
+              type="time"
+              value={evStart}
+              onChange={(e) => setEvStart(e.target.value)}
+              style={inputStyle}
+              required
+            />
+          </div>
+          <div>
+            <label style={labelStyle}>終了</label>
+            <input
+              type="time"
+              value={evEnd}
+              onChange={(e) => setEvEnd(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>タイトル</label>
+            <input
+              type="text"
+              value={evTitle}
+              onChange={(e) => setEvTitle(e.target.value)}
+              style={inputStyle}
+              placeholder="打ち合わせ など"
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={labelStyle}>メモ（任意）</label>
+            <textarea
+              value={evDesc}
+              onChange={(e) => setEvDesc(e.target.value)}
+              style={{ ...inputStyle, minHeight: '60px', resize: 'vertical' }}
+            />
+          </div>
+          <div style={{ gridColumn: '1 / -1', textAlign: 'right' }}>
+            <button
+              type="submit"
+              style={{
+                padding: '0.35rem 0.9rem',
+                borderRadius: '999px',
+                border: 'none',
+                backgroundColor: '#2563eb',
+                color: '#ffffff',
+                fontSize: '0.8rem',
+                cursor: 'pointer',
+              }}
+            >
+              予定を追加
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* カード表示 */}
       <div
         style={{
           backgroundColor: '#ffffff',
@@ -314,8 +437,8 @@ export default function CalendarPage() {
                     </div>
                   )}
                   <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-  ステータス: {STATUS_LABELS[l.status] ?? l.status}
-</div>
+                    ステータス: {STATUS_LABELS[l.status] ?? l.status}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -415,6 +538,7 @@ function Modal({ children, onClose }) {
           maxHeight: '90vh',
           overflowY: 'auto',
           padding: '1rem',
+          boxSizing: 'border-box',
         }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -465,6 +589,22 @@ function EmptyText({ children }) {
       {children}
     </p>
   )
+}
+
+const labelStyle = {
+  display: 'block',
+  marginBottom: '0.25rem',
+  fontSize: '0.8rem',
+  color: '#4b5563',
+}
+
+const inputStyle = {
+  width: '100%',
+  padding: '0.35rem 0.5rem',
+  borderRadius: '0.5rem',
+  border: '1px solid '#d1d5db',
+  fontSize: '0.85rem',
+  boxSizing: 'border-box',
 }
 
 const listStyle = {
