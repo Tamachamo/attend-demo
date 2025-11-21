@@ -1,36 +1,73 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import Loading from '../components/Loading'
 import ErrorMessage from '../components/ErrorMessage'
 
 export default function LoginPage() {
-  const { login, signUp, error } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
-  const [mode, setMode] = useState('login')
+
+  const [mode, setMode] = useState('login') // 'login' | 'signup'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-  const [localError, setLocalError] = useState(null)
+  const [name, setName] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // 既にログイン済ならトップへ
+  if (user) {
+    return <Loading />
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    setSubmitting(true)
-    setLocalError(null)
+    setError(null)
+    setLoading(true)
+
     try {
-      if (!email || !password) {
-        setLocalError('メールアドレスとパスワードを入力してください。')
-        return
-      }
       if (mode === 'login') {
-        await login(email, password)
+        // ログイン
+        const { error: err } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        })
+        if (err) throw err
       } else {
-        await signUp(email, password)
+        // 新規登録
+        if (!name.trim()) {
+          throw new Error('氏名を入力してください。')
+        }
+
+        const { data, error: signupErr } = await supabase.auth.signUp({
+          email,
+          password,
+        })
+        if (signupErr) throw signupErr
+
+        const newUser = data.user
+        if (newUser) {
+          // プロファイル作成
+          const { error: profErr } = await supabase.from('profiles').insert({
+            id: newUser.id,
+            email,
+            name,
+          })
+          if (profErr) {
+            console.error('profiles insert error', profErr)
+            // ここは致命傷じゃないので throw はしない
+          }
+        }
       }
+
+      // 成功したらトップへ
       navigate('/', { replace: true })
-    } catch (err) {
-      console.error(err)
+    } catch (e2) {
+      console.error('auth error', e2)
+      setError(e2.message)
     } finally {
-      setSubmitting(false)
+      setLoading(false)
     }
   }
 
@@ -41,47 +78,48 @@ export default function LoginPage() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(to bottom right, #e5e7eb, #f9fafb)',
-        padding: '1.5rem',
+        backgroundColor: '#f3f4f6',
+        padding: '1rem',
+        boxSizing: 'border-box',
       }}
     >
       <div
         style={{
           width: '100%',
-          maxWidth: '380px',
+          maxWidth: '360px',
           backgroundColor: '#ffffff',
-          padding: '1.5rem',
-          borderRadius: '1rem',
-          boxShadow: '0 10px 25px rgba(0,0,0,0.08)',
+          borderRadius: '0.75rem',
+          padding: '1.25rem',
+          boxShadow: '0 10px 30px rgba(0,0,0,0.06)',
+          boxSizing: 'border-box',
         }}
       >
         <h1
           style={{
-            fontSize: '1.2rem',
+            fontSize: '1.1rem',
             fontWeight: 600,
-            marginBottom: '0.25rem',
+            marginBottom: '0.75rem',
           }}
         >
-          勤怠・申請デモ
+          勤怠デモダッシュボード
         </h1>
         <p
           style={{
-            fontSize: '0.85rem',
+            fontSize: '0.8rem',
             color: '#6b7280',
-            marginBottom: '1rem',
+            marginBottom: '0.75rem',
           }}
         >
           {mode === 'login'
-            ? '登録済みのメールアドレスとパスワードでログインしてください。'
-            : '任意のメールアドレスとパスワードでサインアップできます。（デモ用）'}
+            ? 'メールアドレスとパスワードでログインしてください。'
+            : 'ポートフォリオ用のテストアカウントを作成できます。'}
         </p>
 
         <div
           style={{
             display: 'flex',
             gap: '0.5rem',
-            marginBottom: '1rem',
-            fontSize: '0.85rem',
+            marginBottom: '0.75rem',
           }}
         >
           <button
@@ -89,11 +127,12 @@ export default function LoginPage() {
             onClick={() => setMode('login')}
             style={{
               flex: 1,
-              padding: '0.4rem 0.6rem',
+              padding: '0.35rem 0.4rem',
               borderRadius: '999px',
-              border: '1px solid #d1d5db',
-              backgroundColor: mode === 'login' ? '#111827' : '#ffffff',
-              color: mode === 'login' ? '#f9fafb' : '#374151',
+              border: mode === 'login' ? '1px solid #2563eb' : '1px solid #e5e7eb',
+              backgroundColor: mode === 'login' ? '#2563eb' : '#ffffff',
+              color: mode === 'login' ? '#ffffff' : '#4b5563',
+              fontSize: '0.8rem',
               cursor: 'pointer',
             }}
           >
@@ -104,11 +143,12 @@ export default function LoginPage() {
             onClick={() => setMode('signup')}
             style={{
               flex: 1,
-              padding: '0.4rem 0.6rem',
+              padding: '0.35rem 0.4rem',
               borderRadius: '999px',
-              border: '1px solid #d1d5db',
-              backgroundColor: mode === 'signup' ? '#111827' : '#ffffff',
-              color: mode === 'signup' ? '#f9fafb' : '#374151',
+              border: mode === 'signup' ? '1px solid #2563eb' : '1px solid #e5e7eb',
+              backgroundColor: mode === 'signup' ? '#2563eb' : '#ffffff',
+              color: mode === 'signup' ? '#ffffff' : '#4b5563',
+              fontSize: '0.8rem',
               cursor: 'pointer',
             }}
           >
@@ -116,73 +156,102 @@ export default function LoginPage() {
           </button>
         </div>
 
-        <ErrorMessage message={localError || error} />
+        <ErrorMessage message={error} />
 
         <form
           onSubmit={handleSubmit}
-          style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+          style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}
         >
+          {mode === 'signup' && (
+            <div>
+              <label
+                style={{
+                  display: 'block',
+                  fontSize: '0.8rem',
+                  marginBottom: '0.2rem',
+                }}
+              >
+                氏名
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                style={inputStyle}
+                placeholder="例）山田 太郎"
+              />
+            </div>
+          )}
+
           <div>
             <label
-              htmlFor="email"
-              style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}
+              style={{
+                display: 'block',
+                fontSize: '0.8rem',
+                marginBottom: '0.2rem',
+              }}
             >
               メールアドレス
             </label>
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.6rem',
-                borderRadius: '0.5rem',
-                border: '1px solid #d1d5db',
-                fontSize: '0.9rem',
-              }}
+              style={inputStyle}
+              required
             />
           </div>
+
           <div>
             <label
-              htmlFor="password"
-              style={{ display: 'block', fontSize: '0.8rem', marginBottom: '0.25rem' }}
+              style={{
+                display: 'block',
+                fontSize: '0.8rem',
+                marginBottom: '0.2rem',
+              }}
             >
               パスワード
             </label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '0.5rem 0.6rem',
-                borderRadius: '0.5rem',
-                border: '1px solid #d1d5db',
-                fontSize: '0.9rem',
-              }}
+              style={inputStyle}
+              required
             />
           </div>
+
           <button
             type="submit"
-            disabled={submitting}
+            disabled={loading}
             style={{
-              marginTop: '0.5rem',
-              width: '100%',
-              padding: '0.55rem 0.7rem',
-              borderRadius: '0.75rem',
+              marginTop: '0.4rem',
+              padding: '0.4rem 0.6rem',
+              borderRadius: '999px',
               border: 'none',
-              backgroundColor: submitting ? '#9ca3af' : '#111827',
-              color: '#f9fafb',
-              fontSize: '0.9rem',
-              cursor: submitting ? 'default' : 'pointer',
+              backgroundColor: loading ? '#9ca3af' : '#2563eb',
+              color: '#ffffff',
+              fontSize: '0.85rem',
+              cursor: loading ? 'default' : 'pointer',
             }}
           >
-            {submitting ? '送信中…' : mode === 'login' ? 'ログイン' : '登録してログイン'}
+            {loading
+              ? '処理中…'
+              : mode === 'login'
+              ? 'ログイン'
+              : '新規登録してログイン'}
           </button>
         </form>
       </div>
     </div>
   )
+}
+
+const inputStyle = {
+  width: '100%',
+  padding: '0.35rem 0.5rem',
+  borderRadius: '0.5rem',
+  border: '1px solid #d1d5db',
+  fontSize: '0.85rem',
+  boxSizing: 'border-box',
 }
