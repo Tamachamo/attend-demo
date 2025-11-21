@@ -1,123 +1,298 @@
 import React, { useEffect, useState } from 'react'
 import { format, startOfToday } from 'date-fns'
-import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { supabase } from '../lib/supabaseClient'
 import Loading from '../components/Loading'
 import ErrorMessage from '../components/ErrorMessage'
 
+const ATTEND_STATUS_LABELS = {
+  working: '勤務中',
+  off: '勤務外',
+  no_record: '未打刻',
+  // もし attendance_records.status に on_time / late / absent などがあればここに足す
+  on_time: '定時出勤',
+  late: '遅刻',
+  absent: '欠勤',
+}
+
+const TYPE_LABELS = {
+  paid: '有休',
+  half_am: '半休(午前)',
+  half_pm: '半休(午後)',
+  absence: '欠勤',
+  overtime: '残業',
+  holiday_work: '休日出勤',
+}
+
+const STATUS_LABELS = {
+  pending: '承認待ち',
+  approved: '承認済み',
+  rejected: '却下',
+}
+
 export default function DashboardPage() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-  const [stats, setStats] = useState({
-    todayAttendanceCount: 0,
-    todayLeaveCount: 0,
-    todayEventCount: 0,
-    myTodayStatus: null,
-  })
+
+  const [attend, setAttend] = useState(null)
+  const [todayEvents, setTodayEvents] = useState([])
+  const [todayLeaves, setTodayLeaves] = useState([])
+  const [todayAnns, setTodayAnns] = useState([])
+
+  const today = startOfToday()
+  const todayStr = format(today, 'yyyy-MM-dd')
 
   useEffect(() => {
-    let mounted = true
+    if (!user) return
+    let cancelled = false
+
     const load = async () => {
       setLoading(true)
       setError(null)
-      try {
-        const today = startOfToday()
-        const todayStr = format(today, 'yyyy-MM-dd')
 
-        const { data: attendance, error: attErr } = await supabase
+      try {
+        // 今日の勤怠（自分）
+        const { data: att, error: attErr } = await supabase
           .from('attendance_records')
           .select('*')
+          .eq('user_id', user.id)
           .eq('work_date', todayStr)
+          .maybeSingle()
 
-        if (attErr) throw attErr
+        if (attErr && attErr.code !== 'PGRST116') throw attErr // not found 以外
 
-        const { data: leaves, error: leaveErr } = await supabase
+        // 今日の予定（全員分・カレンダーのモーダルと同じ中身）
+        const { data: ev, error: evErr } = await supabase
+          .from('manual_events')
+          .select('*, profiles(name)')
+          .gte('start_at', `${todayStr}T00:00:00`)
+          .lt('start_at', `${todayStr}T23:59:59`)
+          .order('start_at', { ascending: true })
+
+        if (evErr) throw evErr
+
+        // 今日の申請
+        const { data: lr, error: lrErr } = await supabase
           .from('leave_requests')
+          .select('*, profiles(name)')
+          .eq('date', todayStr)
+          .order('created_at', { ascending: true })
+
+        if (lrErr) throw lrErr
+
+        // 今日の連絡事項
+        const { data: an, error: anErr } = await supabase
+          .from('announcements')
           .select('*')
           .eq('date', todayStr)
+          .order('created_at', { ascending: true })
 
-        if (leaveErr) throw leaveErr
+        if (anErr) throw anErr
 
-        const startOfDay = today.toISOString()
-        const endOfDay = new Date(today.getTime() + 24 * 60 * 60 * 1000).toISOString()
-
-        const { data: events, error: eventErr } = await supabase
-          .from('manual_events')
-          .select('*')
-          .lte('start_at', endOfDay)
-          .gte('end_at', startOfDay)
-
-        if (eventErr) throw eventErr
-
-        const myRecord = attendance.find((a) => a.user_id === user.id) || null
-
-        if (mounted) {
-          setStats({
-            todayAttendanceCount: attendance.length,
-            todayLeaveCount: leaves.length,
-            todayEventCount: events.length,
-            myTodayStatus: myRecord?.status || null,
-          })
+        if (!cancelled) {
+          setAttend(att ?? null)
+          setTodayEvents(ev || [])
+          setTodayLeaves(lr || [])
+          setTodayAnns(an || [])
         }
-      } catch (err) {
-        console.error('dashboard error', err)
-        if (mounted) setError(err.message)
+      } catch (e) {
+        console.error('dashboard load error', e)
+        if (!cancelled) setError(e.message)
       } finally {
-        if (mounted) setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     load()
     return () => {
-      mounted = false
+      cancelled = true
     }
-  }, [user.id])
+  }, [user, todayStr])
 
-  if (loading) return <Loading />
+  if (!user || loading) return <Loading />
+
+  const statusLabel =
+    ATTEND_STATUS_LABELS[attend?.status] ??
+    (attend ? '記録あり' : '未打刻')
+
+  const timeLabel =
+    attend && attend.clock_in
+      ? `${attend.clock_in} 〜 ${attend.clock_out || '---'}`
+      : ''
 
   return (
     <div>
-      <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.75rem' }}>
-        本日のサマリー
+      <h2 style={{ fontSize: '1.1rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+        ダッシュボード
       </h2>
+      <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.75rem' }}>
+        今日の勤怠状況と予定・申請・連絡事項のサマリーです。
+      </p>
+
       <ErrorMessage message={error} />
+
+      {/* 勤怠ステータス */}
       <div
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
-          gap: '0.75rem',
-          marginBottom: '1.5rem',
+          backgroundColor: '#ffffff',
+          borderRadius: '0.75rem',
+          padding: '0.75rem',
+          marginBottom: '0.75rem',
         }}
       >
-        <StatCard label="本日の勤怠レコード" value={`${stats.todayAttendanceCount} 件`} />
-        <StatCard label="本日の申請" value={`${stats.todayLeaveCount} 件`} />
-        <StatCard label="本日の予定" value={`${stats.todayEventCount} 件`} />
-        <StatCard
-          label="あなたの勤怠ステータス"
-          value={stats.myTodayStatus ? stats.myTodayStatus : '未登録'}
-        />
+        <h3
+          style={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            marginBottom: '0.4rem',
+          }}
+        >
+          今日の勤怠
+        </h3>
+        <p style={{ fontSize: '0.85rem', marginBottom: '0.1rem' }}>
+          {format(today, 'yyyy/MM/dd')}（{'日月火水木金土'[today.getDay()]}）
+        </p>
+        <p style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.1rem' }}>
+          状態：{statusLabel}
+        </p>
+        {timeLabel && (
+          <p style={{ fontSize: '0.85rem', color: '#4b5563' }}>時間：{timeLabel}</p>
+        )}
       </div>
 
-      <p style={{ fontSize: '0.9rem', color: '#6b7280' }}>
-        ※ この環境はデモ用です。毎日 0:00（日本時間）にデータがリセットされます。
-      </p>
+      {/* 今日の予定・申請・連絡事項（カレンダーモーダルと同じ内容） */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '0.75rem',
+          padding: '0.75rem',
+        }}
+      >
+        <h3
+          style={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            marginBottom: '0.5rem',
+          }}
+        >
+          今日の予定・申請・連絡事項
+        </h3>
+
+        {/* 予定 */}
+        <SectionTitle>予定</SectionTitle>
+        {todayEvents.length === 0 ? (
+          <EmptyText>予定はありません。</EmptyText>
+        ) : (
+          <ul style={listStyle}>
+            {todayEvents.map((e) => (
+              <li key={e.id} style={listItemStyle}>
+                <div style={{ fontSize: '0.85rem' }}>
+                  {e.profiles?.name ?? 'ユーザー'} / {timeRangeFromEvent(e)}
+                </div>
+                <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>{e.title}</div>
+                {e.description && (
+                  <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                    {e.description}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* 申請 */}
+        <SectionTitle>申請</SectionTitle>
+        {todayLeaves.length === 0 ? (
+          <EmptyText>申請はありません。</EmptyText>
+        ) : (
+          <ul style={listStyle}>
+            {todayLeaves.map((l) => (
+              <li key={l.id} style={listItemStyle}>
+                <div style={{ fontSize: '0.85rem' }}>
+                  {l.profiles?.name ?? 'ユーザー'} /{' '}
+                  {TYPE_LABELS[l.type] ?? l.type} {timeRangeFromLeave(l)}
+                </div>
+                {l.reason && (
+                  <div style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+                    理由：{l.reason}
+                  </div>
+                )}
+                <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
+                  ステータス: {STATUS_LABELS[l.status] ?? l.status}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {/* 連絡事項 */}
+        <SectionTitle>連絡事項</SectionTitle>
+        {todayAnns.length === 0 ? (
+          <EmptyText>連絡事項はありません。</EmptyText>
+        ) : (
+          <ul style={listStyle}>
+            {todayAnns.map((a) => (
+              <li key={a.id} style={listItemStyle}>
+                {a.title && (
+                  <div style={{ fontSize: '0.9rem', fontWeight: 500 }}>{a.title}</div>
+                )}
+                <div style={{ fontSize: '0.9rem', whiteSpace: 'pre-wrap' }}>
+                  {a.message}
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
 
-function StatCard({ label, value }) {
+function timeRangeFromEvent(e) {
+  if (!e.start_at) return ''
+  const d = new Date(e.start_at)
+  const s = format(d, 'HH:mm')
+  if (!e.end_at) return s
+  const e2 = new Date(e.end_at)
+  return `${s}〜${format(e2, 'HH:mm')}`
+}
+
+function timeRangeFromLeave(l) {
+  if (!l.start_time || !l.end_time) return ''
+  return `(${l.start_time}〜${l.end_time})`
+}
+
+function SectionTitle({ children }) {
   return (
-    <div
+    <h4
       style={{
-        backgroundColor: '#ffffff',
-        borderRadius: '0.75rem',
-        padding: '0.9rem 1rem',
-        boxShadow: '0 4px 12px rgba(0,0,0,0.04)',
+        marginTop: '0.75rem',
+        marginBottom: '0.25rem',
+        fontSize: '0.9rem',
+        fontWeight: 600,
       }}
     >
-      <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.4rem' }}>{label}</div>
-      <div style={{ fontSize: '1.2rem', fontWeight: 600 }}>{value}</div>
-    </div>
+      {children}
+    </h4>
   )
+}
+
+function EmptyText({ children }) {
+  return (
+    <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '0.25rem' }}>
+      {children}
+    </p>
+  )
+}
+
+const listStyle = {
+  listStyle: 'none',
+  padding: 0,
+  margin: 0,
+}
+
+const listItemStyle = {
+  padding: '0.4rem 0',
+  borderBottom: '1px solid #f3f4f6',
 }
