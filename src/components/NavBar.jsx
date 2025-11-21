@@ -1,12 +1,16 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
-const linkStyle = ({ isActive }) => ({
-  padding: '0.5rem 0.75rem',
-  borderRadius: '0.5rem',
+const linkBaseStyle = {
+  padding: '0.4rem 0.6rem',
+  borderRadius: '999px',
   textDecoration: 'none',
-  fontSize: '0.9rem',
+  fontSize: '0.8rem',
+}
+
+const linkStyle = ({ isActive }) => ({
+  ...linkBaseStyle,
   color: isActive ? '#111827' : '#4b5563',
   backgroundColor: isActive ? '#e5e7eb' : 'transparent',
 })
@@ -14,6 +18,16 @@ const linkStyle = ({ isActive }) => ({
 export default function NavBar() {
   const { profile, logout } = useAuth()
   const navigate = useNavigate()
+  const [isMobile, setIsMobile] = useState(false)
+
+  useEffect(() => {
+    const handler = () => {
+      setIsMobile(window.innerWidth < 640)
+    }
+    handler()
+    window.addEventListener('resize', handler)
+    return () => window.removeEventListener('resize', handler)
+  }, [])
 
   const handleLogout = async () => {
     await logout()
@@ -24,20 +38,21 @@ export default function NavBar() {
     <header
       style={{
         borderBottom: '1px solid #e5e7eb',
-        padding: '0.75rem 1rem',
+        padding: '0.5rem 0.75rem',
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: isMobile ? 'column' : 'row',
+        alignItems: isMobile ? 'flex-start' : 'center',
         justifyContent: 'space-between',
-        gap: '0.75rem',
+        gap: '0.5rem',
       }}
     >
-      <div style={{ fontWeight: 600, fontSize: '1rem' }}>勤怠デモダッシュボード</div>
+      <div style={{ fontWeight: 600, fontSize: '0.95rem' }}>勤怠デモダッシュボード</div>
+
       <nav
         style={{
           display: 'flex',
           flexWrap: 'wrap',
-          gap: '0.5rem',
-          alignItems: 'center',
+          gap: '0.35rem',
         }}
       >
         <NavLink to="/" style={linkStyle} end>
@@ -56,12 +71,14 @@ export default function NavBar() {
           連絡事項
         </NavLink>
       </nav>
+
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '0.75rem',
-          fontSize: '0.85rem',
+          gap: '0.5rem',
+          fontSize: '0.8rem',
+          alignSelf: isMobile ? 'flex-end' : 'center',
         }}
       >
         {profile && <span>{profile.name}</span>}
@@ -71,7 +88,7 @@ export default function NavBar() {
           style={{
             border: '1px solid #d1d5db',
             background: '#f9fafb',
-            padding: '0.3rem 0.6rem',
+            padding: '0.25rem 0.6rem',
             borderRadius: '999px',
             fontSize: '0.8rem',
             cursor: 'pointer',
