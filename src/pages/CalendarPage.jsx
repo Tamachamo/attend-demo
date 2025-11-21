@@ -602,7 +602,7 @@ const inputStyle = {
   width: '100%',
   padding: '0.35rem 0.5rem',
   borderRadius: '0.5rem',
-  border: '1px solid '#d1d5db',
+  border: '1px solid #d1d5db',
   fontSize: '0.85rem',
   boxSizing: 'border-box',
 }
