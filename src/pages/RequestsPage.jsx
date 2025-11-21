@@ -292,7 +292,7 @@ export default function RequestsPage() {
                       ? `${r.start_time}〜${r.end_time}`
                       : '-'}
                   </td>
-                  <td style={{ padding: '0.35rem' }}>{r.status}</td>
+                  <td style={{ padding: '0.35rem' }}><span>{STATUS_LABELS[item.status] ?? item.status}</span></td>
                 </tr>
               ))}
             </tbody>
