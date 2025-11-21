@@ -33,6 +33,8 @@ export default function RequestsPage() {
   const [formEndTime, setFormEndTime] = useState('18:00')
   const [formReason, setFormReason] = useState('')
 
+  const isAdmin = profile?.is_admin === true
+
   useEffect(() => {
     let cancelled = false
 
@@ -43,7 +45,7 @@ export default function RequestsPage() {
       try {
         const { data, error: err } = await supabase
           .from('leave_requests')
-          .select('*, profiles(name)')
+          .select('*, profiles(name, is_admin)')
           .order('date', { ascending: false })
           .order('created_at', { ascending: false })
 
@@ -67,6 +69,23 @@ export default function RequestsPage() {
     }
   }, [user])
 
+  const reloadList = async () => {
+    if (!user) return
+    try {
+      const { data, error: fetchErr } = await supabase
+        .from('leave_requests')
+        .select('*, profiles(name, is_admin)')
+        .order('date', { ascending: false })
+        .order('created_at', { ascending: false })
+
+      if (fetchErr) throw fetchErr
+      setItems(data || [])
+    } catch (e) {
+      console.error('leave_requests reload error', e)
+      setError(e.message)
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user) return
@@ -87,22 +106,30 @@ export default function RequestsPage() {
       const { error: err } = await supabase.from('leave_requests').insert(payload)
       if (err) throw err
 
-      // 再取得
-      const { data, error: fetchErr } = await supabase
-        .from('leave_requests')
-        .select('*, profiles(name)')
-        .order('date', { ascending: false })
-        .order('created_at', { ascending: false })
+      await reloadList()
 
-      if (fetchErr) throw fetchErr
-      setItems(data || [])
-
-      // フォームは日付と理由だけ軽くリセット
       setFormDate(format(startOfToday(), 'yyyy-MM-dd'))
       setFormReason('')
     } catch (e2) {
       console.error('leave_requests submit error', e2)
       setError(e2.message)
+    }
+  }
+
+  const handleUpdateStatus = async (id, status) => {
+    if (!user || !isAdmin) return
+    setError(null)
+    try {
+      const { error: err } = await supabase
+        .from('leave_requests')
+        .update({ status })
+        .eq('id', id)
+
+      if (err) throw err
+      await reloadList()
+    } catch (e) {
+      console.error('leave_requests update status error', e)
+      setError(e.message)
     }
   }
 
@@ -268,25 +295,54 @@ export default function RequestsPage() {
                   <th style={thStyle}>時間</th>
                   <th style={thStyle}>理由</th>
                   <th style={thStyle}>ステータス</th>
+                  {isAdmin && <th style={thStyle}>操作</th>}
                 </tr>
               </thead>
               <tbody>
-                {items.map((item) => (
-                  <tr key={item.id}>
-                    <td style={tdStyle}>{item.date}</td>
-                    <td style={tdStyle}>{item.profiles?.name ?? 'ユーザー'}</td>
-                    <td style={tdStyle}>{TYPE_LABELS[item.type] ?? item.type}</td>
-                    <td style={tdStyle}>
-                      {item.start_time && item.end_time
-                        ? `${item.start_time}〜${item.end_time}`
-                        : ''}
-                    </td>
-                    <td style={tdStyle}>{item.reason}</td>
-                    <td style={tdStyle}>
-                      {STATUS_LABELS[item.status] ?? item.status}
-                    </td>
-                  </tr>
-                ))}
+                {items.map((item) => {
+                  const statusLabel = STATUS_LABELS[item.status] ?? item.status
+
+                  return (
+                    <tr key={item.id}>
+                      <td style={tdStyle}>{item.date}</td>
+                      <td style={tdStyle}>{item.profiles?.name ?? 'ユーザー'}</td>
+                      <td style={tdStyle}>{TYPE_LABELS[item.type] ?? item.type}</td>
+                      <td style={tdStyle}>
+                        {item.start_time && item.end_time
+                          ? `${item.start_time}〜${item.end_time}`
+                          : ''}
+                      </td>
+                      <td style={tdStyle}>{item.reason}</td>
+                      <td style={tdStyle}>{statusLabel}</td>
+                      {isAdmin && (
+                        <td style={tdStyle}>
+                          <div
+                            style={{
+                              display: 'flex',
+                              gap: '0.25rem',
+                              flexWrap: 'wrap',
+                            }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(item.id, 'approved')}
+                              style={smallBtnStyle('#16a34a')}
+                            >
+                              承認
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateStatus(item.id, 'rejected')}
+                              style={smallBtnStyle('#dc2626')}
+                            >
+                              却下
+                            </button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -324,3 +380,13 @@ const tdStyle = {
   borderBottom: '1px solid #f3f4f6',
   verticalAlign: 'top',
 }
+
+const smallBtnStyle = (bg) => ({
+  padding: '0.2rem 0.45rem',
+  borderRadius: '999px',
+  border: 'none',
+  backgroundColor: bg,
+  color: '#ffffff',
+  fontSize: '0.75rem',
+  cursor: 'pointer',
+})
