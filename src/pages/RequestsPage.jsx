@@ -14,6 +14,12 @@ const TYPE_OPTIONS = [
   { value: 'holiday_work', label: '休日出勤' },
 ]
 
+const STATUS_LABELS = {
+  pending: '承認待ち',
+  approved: '承認済み',
+  rejected: '却下',
+}
+
 export default function RequestsPage() {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
