@@ -18,6 +18,12 @@ const TYPE_LABELS = {
   holiday_work: '休日出勤',
 }
 
+const STATUS_LABELS = {
+  pending: '承認待ち',
+  approved: '承認済み',
+  rejected: '却下',
+}
+
 export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
