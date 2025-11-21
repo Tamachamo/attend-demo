@@ -4,8 +4,6 @@ import {
   eachDayOfInterval,
   format,
   startOfToday,
-  startOfDay,
-  endOfDay,
 } from 'date-fns'
 import { supabase } from '../lib/supabaseClient'
 import Loading from '../components/Loading'
@@ -24,14 +22,14 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const [events, setEvents] = useState([])       // manual_events + profiles
-  const [leaves, setLeaves] = useState([])       // leave_requests + profiles
-  const [anns, setAnns] = useState([])           // announcements
+  const [events, setEvents] = useState([])
+  const [leaves, setLeaves] = useState([])
+  const [anns, setAnns] = useState([])
 
   const [days, setDays] = useState([])
-  const [offset, setOffset] = useState(0)        // 日付範囲のオフセット（0=今日中心、+1=未来寄せ…）
+  const [offset, setOffset] = useState(0)
 
-  const [selectedDate, setSelectedDate] = useState(null) // Date
+  const [selectedDate, setSelectedDate] = useState(null)
   const [showModal, setShowModal] = useState(false)
 
   useEffect(() => {
@@ -42,7 +40,7 @@ export default function CalendarPage() {
       setError(null)
 
       try {
-        const base = addDays(startOfToday(), offset * 7)   // 週単位で動かす
+        const base = addDays(startOfToday(), offset * 7)
         const start = addDays(base, -3)
         const end = addDays(base, 10)
 
@@ -50,7 +48,7 @@ export default function CalendarPage() {
           setDays(eachDayOfInterval({ start, end }))
         }
 
-        // manual_events + profiles
+        // manual_events + profiles(name)
         const { data: ev, error: evErr } = await supabase
           .from('manual_events')
           .select('*, profiles(name)')
@@ -60,7 +58,7 @@ export default function CalendarPage() {
 
         if (evErr) throw evErr
 
-        // leave_requests + profiles
+        // leave_requests + profiles(name)
         const { data: lr, error: lrErr } = await supabase
           .from('leave_requests')
           .select('*, profiles(name)')
@@ -256,7 +254,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* モーダル */}
+      {/* 日付クリック時のモーダル */}
       {showModal && selectedDate && (
         <Modal onClose={closeModal}>
           <h3
@@ -352,6 +350,7 @@ function groupByDate(items, getter) {
         : format(new Date(value), 'yyyy-MM-dd')
     if (!map[key]) map[key] = []
     map[key].push(item)
+  }
   return map
 }
 
