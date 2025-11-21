@@ -9,114 +9,93 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // 初回だけユーザー＋プロフィールをロード
   useEffect(() => {
-    let mounted = true
+    let cancelled = false
 
-    const init = async () => {
+    const load = async () => {
       setLoading(true)
       setError(null)
       try {
         const {
-          data: { user },
-          error,
+          data: { user: currentUser },
+          error: userErr,
         } = await supabase.auth.getUser()
-        if (error) throw error
-        if (user && mounted) {
-          setUser(user)
-          await ensureProfile(user)
+        if (userErr) throw userErr
+
+        if (!currentUser) {
+          if (!cancelled) {
+            setUser(null)
+            setProfile(null)
+          }
+          return
         }
-      } catch (err) {
-        console.error('auth init error', err)
-        if (mounted) setError(err.message)
+
+        if (!cancelled) {
+          setUser(currentUser)
+        }
+
+        const { data: prof, error: profErr } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', currentUser.id)
+          .maybeSingle()
+
+        if (profErr) throw profErr
+
+        if (!cancelled) {
+          setProfile(prof || null)
+        }
+      } catch (e) {
+        console.error('Auth init error', e)
+        if (!cancelled) setError(e.message)
       } finally {
-        if (mounted) setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
-    init()
+    load()
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const nextUser = session?.user ?? null
-      setUser(nextUser)
-      if (nextUser) {
-        await ensureProfile(nextUser)
-      } else {
-        setProfile(null)
-      }
-    })
+    // auth 状態の変化を監視
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        // ここでは loading をいじらない（チカチカ防止）
+        const currentUser = session?.user ?? null
+        setUser(currentUser)
+
+        if (currentUser) {
+          try {
+            const { data: prof, error: profErr } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', currentUser.id)
+              .maybeSingle()
+
+            if (profErr) {
+              console.error('Auth profile reload error', profErr)
+              return
+            }
+            setProfile(prof || null)
+          } catch (e) {
+            console.error('Auth profile reload fatal', e)
+          }
+        } else {
+          setProfile(null)
+        }
+      },
+    )
 
     return () => {
-      mounted = false
-      subscription.unsubscribe()
+      cancelled = true
+      sub?.subscription?.unsubscribe()
     }
   }, [])
-
-  const ensureProfile = async (user) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert(
-        {
-          id: user.id,
-          name: user.user_metadata?.name || user.email?.split('@')[0] || 'User',
-        },
-        { onConflict: 'id' },
-      )
-      .select('*')
-      .single()
-
-    if (error) {
-      console.error('ensureProfile error', error)
-      throw error
-    }
-    setProfile(data)
-  }
-
-  const login = async (email, password) => {
-    setError(null)
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-    if (error) {
-      setError(error.message)
-      throw error
-    }
-    if (data.user) {
-      await ensureProfile(data.user)
-    }
-  }
-
-  const signUp = async (email, password) => {
-    setError(null)
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-    if (error) {
-      setError(error.message)
-      throw error
-    }
-    if (data.user) {
-      await ensureProfile(data.user)
-    }
-  }
-
-  const logout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setProfile(null)
-  }
 
   const value = {
     user,
     profile,
     loading,
     error,
-    login,
-    signUp,
-    logout,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
