@@ -314,8 +314,8 @@ export default function CalendarPage() {
                     </div>
                   )}
                   <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>
-                    ステータス: {l.status}
-                  </div>
+  ステータス: {STATUS_LABELS[l.status] ?? l.status}
+</div>
                 </li>
               ))}
             </ul>
