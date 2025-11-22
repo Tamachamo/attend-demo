@@ -53,10 +53,11 @@ export default function LoginPage() {
         if (newUser) {
           // プロファイル作成（メール未確認でも先に作る）
           const { error: profErr } = await supabase.from('profiles').insert({
-            id: newUser.id,
-            email,
-            name,
-          })
+  id: newUser.id,
+  email,
+  name,
+  is_admin: true  // ← 全員管理者にする
+})
           if (profErr) {
             console.error('profiles insert error', profErr)
           }
