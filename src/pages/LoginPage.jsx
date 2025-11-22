@@ -15,8 +15,8 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [info, setInfo] = useState(null)
 
-  // 既にログイン済ならトップへ
   if (user) {
     return <Loading />
   }
@@ -24,16 +24,18 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
+    setInfo(null)
     setLoading(true)
 
     try {
       if (mode === 'login') {
-        // ログイン
         const { error: err } = await supabase.auth.signInWithPassword({
           email,
           password,
         })
         if (err) throw err
+
+        navigate('/', { replace: true })
       } else {
         // 新規登録
         if (!name.trim()) {
@@ -47,8 +49,9 @@ export default function LoginPage() {
         if (signupErr) throw signupErr
 
         const newUser = data.user
+
         if (newUser) {
-          // プロファイル作成
+          // プロファイル作成（メール未確認でも先に作る）
           const { error: profErr } = await supabase.from('profiles').insert({
             id: newUser.id,
             email,
@@ -56,13 +59,20 @@ export default function LoginPage() {
           })
           if (profErr) {
             console.error('profiles insert error', profErr)
-            // ここは致命傷じゃないので throw はしない
           }
         }
-      }
 
-      // 成功したらトップへ
-      navigate('/', { replace: true })
+        // Email確認が必要な設定の場合、data.session は null のことが多い
+        if (!data.session) {
+          setInfo(
+            '登録用の確認メールを送信しました。メール内のリンクをクリックしてから、改めてログインしてください。'
+          )
+          // ここではログイン画面に留まる
+        } else {
+          // メール確認不要の場合は、そのままログイン扱い
+          navigate('/', { replace: true })
+        }
+      }
     } catch (e2) {
       console.error('auth error', e2)
       setError(e2.message)
@@ -124,7 +134,11 @@ export default function LoginPage() {
         >
           <button
             type="button"
-            onClick={() => setMode('login')}
+            onClick={() => {
+              setMode('login')
+              setError(null)
+              setInfo(null)
+            }}
             style={{
               flex: 1,
               padding: '0.35rem 0.4rem',
@@ -140,7 +154,11 @@ export default function LoginPage() {
           </button>
           <button
             type="button"
-            onClick={() => setMode('signup')}
+            onClick={() => {
+              setMode('signup')
+              setError(null)
+              setInfo(null)
+            }}
             style={{
               flex: 1,
               padding: '0.35rem 0.4rem',
@@ -157,6 +175,21 @@ export default function LoginPage() {
         </div>
 
         <ErrorMessage message={error} />
+
+        {info && (
+          <div
+            style={{
+              marginBottom: '0.75rem',
+              fontSize: '0.78rem',
+              color: '#065f46',
+              backgroundColor: '#d1fae5',
+              borderRadius: '0.5rem',
+              padding: '0.5rem 0.6rem',
+            }}
+          >
+            {info}
+          </div>
+        )}
 
         <form
           onSubmit={handleSubmit}
@@ -239,7 +272,7 @@ export default function LoginPage() {
               ? '処理中…'
               : mode === 'login'
               ? 'ログイン'
-              : '新規登録してログイン'}
+              : '新規登録して確認メールを送信'}
           </button>
         </form>
       </div>
