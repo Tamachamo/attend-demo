@@ -273,7 +273,7 @@ export default function LoginPage() {
               ? '処理中…'
               : mode === 'login'
               ? 'ログイン'
-              : '新規登録して確認メールを送信'}
+              : '新規登録してログイン'}
           </button>
         </form>
       </div>
