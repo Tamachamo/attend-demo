@@ -15,8 +15,8 @@ export default function LoginPage() {
   const [name, setName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [info, setInfo] = useState(null)
 
+  // すでにログイン済みならトップへ
   if (user) {
     return <Loading />
   }
@@ -24,11 +24,11 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setError(null)
-    setInfo(null)
     setLoading(true)
 
     try {
       if (mode === 'login') {
+        // ログイン
         const { error: err } = await supabase.auth.signInWithPassword({
           email,
           password,
@@ -37,7 +37,7 @@ export default function LoginPage() {
 
         navigate('/', { replace: true })
       } else {
-        // 新規登録
+        // 新規登録（メール認証なし前提）
         if (!name.trim()) {
           throw new Error('氏名を入力してください。')
         }
@@ -49,30 +49,22 @@ export default function LoginPage() {
         if (signupErr) throw signupErr
 
         const newUser = data.user
-
         if (newUser) {
-          // プロファイル作成（メール未確認でも先に作る）
+          // 全員管理者で profiles を作成（FK対策）
           const { error: profErr } = await supabase.from('profiles').insert({
-  id: newUser.id,
-  email,
-  name,
-  is_admin: true  // ← 全員管理者にする
-})
+            id: newUser.id,
+            email,
+            name,
+            is_admin: true,
+          })
           if (profErr) {
+            // ここでコケてもログイン自体は進める
             console.error('profiles insert error', profErr)
           }
         }
 
-        // Email確認が必要な設定の場合、data.session は null のことが多い
-        if (!data.session) {
-          setInfo(
-            '登録用の確認メールを送信しました。メール内のリンクをクリックしてから、改めてログインしてください。'
-          )
-          // ここではログイン画面に留まる
-        } else {
-          // メール確認不要の場合は、そのままログイン扱い
-          navigate('/', { replace: true })
-        }
+        // メール認証オフ前提なので、セッションが返ってくる → 即ログイン扱いでOK
+        navigate('/', { replace: true })
       }
     } catch (e2) {
       console.error('auth error', e2)
@@ -121,11 +113,10 @@ export default function LoginPage() {
             marginBottom: '0.75rem',
           }}
         >
-          {mode === 'login'
-            ? 'メールアドレスとパスワードでログインしてください。'
-            : 'テストアカウントを作成できます。'}
+          デモ用の簡易ログイン画面です。テスト用のアカウントを自由に作成できます。
         </p>
 
+        {/* モード切り替え */}
         <div
           style={{
             display: 'flex',
@@ -138,7 +129,6 @@ export default function LoginPage() {
             onClick={() => {
               setMode('login')
               setError(null)
-              setInfo(null)
             }}
             style={{
               flex: 1,
@@ -154,11 +144,10 @@ export default function LoginPage() {
             ログイン
           </button>
           <button
-            type="button"
+            type="button'
             onClick={() => {
               setMode('signup')
               setError(null)
-              setInfo(null)
             }}
             style={{
               flex: 1,
@@ -176,21 +165,6 @@ export default function LoginPage() {
         </div>
 
         <ErrorMessage message={error} />
-
-        {info && (
-          <div
-            style={{
-              marginBottom: '0.75rem',
-              fontSize: '0.78rem',
-              color: '#065f46',
-              backgroundColor: '#d1fae5',
-              borderRadius: '0.5rem',
-              padding: '0.5rem 0.6rem',
-            }}
-          >
-            {info}
-          </div>
-        )}
 
         <form
           onSubmit={handleSubmit}
