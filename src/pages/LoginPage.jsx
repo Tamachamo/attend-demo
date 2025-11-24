@@ -49,19 +49,19 @@ export default function LoginPage() {
         if (signupErr) throw signupErr
 
         const newUser = data.user
-        if (newUser) {
-          // 全員管理者で profiles を作成（FK対策）
-          const { error: profErr } = await supabase.from('profiles').insert({
-            id: newUser.id,
-            email,
-            name,
-            is_admin: true,
-          })
-          if (profErr) {
-            // ここでコケてもログイン自体は進める
-            console.error('profiles insert error', profErr)
-          }
-        }
+if (newUser) {
+  // 全員管理者で profiles を作成（FK対策）
+  const { error: profErr } = await supabase.from('profiles').insert({
+    id: newUser.id,
+    name,
+    role: '管理者', // デモ用なので固定でOK。不要なら消してもいい
+    created_at: new Date().toISOString(), // NOT NULL対策
+    is_admin: true,
+  })
+  if (profErr) {
+    console.error('profiles insert error', profErr)
+  }
+}
 
         // メール認証オフ前提なので、セッションが返ってくる → 即ログイン扱いでOK
         navigate('/', { replace: true })
