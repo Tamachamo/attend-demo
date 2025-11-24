@@ -144,7 +144,7 @@ export default function LoginPage() {
             ログイン
           </button>
           <button
-            type="button'
+            type="button"
             onClick={() => {
               setMode('signup')
               setError(null)
