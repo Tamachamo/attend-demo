@@ -3,15 +3,12 @@ import { supabase } from '../lib/supabaseClient'
 
 const AuthContext = createContext(null)
 
-const INACTIVITY_LIMIT_MS = 30 * 60 * 1000 // 30分 無操作で自動ログアウト
-
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // --- 初回だけユーザー＋プロフィールをロード ---
   useEffect(() => {
     let cancelled = false
 
@@ -25,16 +22,11 @@ export function AuthProvider({ children }) {
         } = await supabase.auth.getUser()
         if (userErr) throw userErr
 
-        if (!currentUser) {
-          if (!cancelled) {
-            setUser(null)
-            setProfile(null)
-          }
-        } else {
-          if (!cancelled) {
-            setUser(currentUser)
-          }
+        if (!cancelled) {
+          setUser(currentUser ?? null)
+        }
 
+        if (currentUser) {
           const { data: prof, error: profErr } = await supabase
             .from('profiles')
             .select('*')
@@ -42,10 +34,9 @@ export function AuthProvider({ children }) {
             .maybeSingle()
 
           if (profErr) throw profErr
-
-          if (!cancelled) {
-            setProfile(prof || null)
-          }
+          if (!cancelled) setProfile(prof ?? null)
+        } else {
+          if (!cancelled) setProfile(null)
         }
       } catch (e) {
         console.error('Auth init error', e)
@@ -57,28 +48,17 @@ export function AuthProvider({ children }) {
 
     load()
 
-    // auth 状態の変化を監視（ログイン／ログアウトなど）
     const { data: sub } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (_event, session) => {
         const currentUser = session?.user ?? null
         setUser(currentUser)
-
         if (currentUser) {
-          try {
-            const { data: prof, error: profErr } = await supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', currentUser.id)
-              .maybeSingle()
-
-            if (profErr) {
-              console.error('Auth profile reload error', profErr)
-              return
-            }
-            setProfile(prof || null)
-          } catch (e) {
-            console.error('Auth profile reload fatal', e)
-          }
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUser.id)
+            .maybeSingle()
+          setProfile(prof ?? null)
         } else {
           setProfile(null)
         }
@@ -86,64 +66,18 @@ export function AuthProvider({ children }) {
     )
 
     return () => {
-      cancelled = true
       sub?.subscription?.unsubscribe()
+      cancelled = true
     }
   }, [])
 
-  // --- 一定時間無操作なら自動ログアウト ---
-  useEffect(() => {
-    if (!user) return
-
-    let lastActivity = Date.now()
-
-    const resetActivity = () => {
-      lastActivity = Date.now()
-    }
-
-    const events = ['click', 'keydown', 'mousemove', 'scroll', 'touchstart']
-
-    events.forEach((ev) => window.addEventListener(ev, resetActivity, { passive: true }))
-
-    const intervalId = setInterval(async () => {
-      const now = Date.now()
-      if (!user) return
-
-      const diff = now - lastActivity
-      if (diff > INACTIVITY_LIMIT_MS) {
-        console.log('Inactivity detected, auto sign-out')
-        try {
-          await supabase.auth.signOut()
-        } catch (e) {
-          console.error('auto sign-out error', e)
-        } finally {
-          // タイマー側で勝手に user をいじらず、
-          // supabase の onAuthStateChange に任せる
-          lastActivity = Date.now()
-        }
-      }
-    }, 60 * 1000) // 1分ごとにチェック
-
-    return () => {
-      clearInterval(intervalId)
-      events.forEach((ev) => window.removeEventListener(ev, resetActivity))
-    }
-  }, [user])
-
-  const value = {
-    user,
-    profile,
-    loading,
-    error,
-  }
+  const value = { user, profile, loading, error }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
 export function useAuth() {
   const ctx = useContext(AuthContext)
-  if (!ctx) {
-    throw new Error('useAuth must be used within AuthProvider')
-  }
+  if (!ctx) throw new Error('useAuth must be used within AuthProvider')
   return ctx
 }
