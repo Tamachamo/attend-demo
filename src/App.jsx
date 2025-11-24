@@ -8,12 +8,12 @@ import AttendancePage from './pages/AttendancePage'
 import RequestsPage from './pages/RequestsPage'
 import AnnouncementsPage from './pages/AnnouncementsPage'
 import LoginPage from './pages/LoginPage'
-import ProtectedRoute from './components/ProtectedRoute'
 
 export default function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f3f4f6' }}>
       <NavBar />
+
       <main style={{ width: '100%' }}>
         <div
           style={{
@@ -24,47 +24,15 @@ export default function App() {
           }}
         >
           <Routes>
+            {/* 認証画面 */}
             <Route path="/login" element={<LoginPage />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <DashboardPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/calendar"
-              element={
-                <ProtectedRoute>
-                  <CalendarPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/attendance"
-              element={
-                <ProtectedRoute>
-                  <AttendancePage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/requests"
-              element={
-                <ProtectedRoute>
-                  <RequestsPage />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/announcements"
-              element={
-                <ProtectedRoute>
-                  <AnnouncementsPage />
-                </ProtectedRoute>
-              }
-            />
+
+            {/* ▼ここからは未ログインでもページ表示OK（ProtectedRoute撤廃） */}
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/calendar" element={<CalendarPage />} />
+            <Route path="/attendance" element={<AttendancePage />} />
+            <Route path="/requests" element={<RequestsPage />} />
+            <Route path="/announcements" element={<AnnouncementsPage />} />
           </Routes>
         </div>
       </main>
