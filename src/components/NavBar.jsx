@@ -1,11 +1,12 @@
 // src/components/NavBar.jsx
 import React, { useState } from 'react'
-import { NavLink, useLocation } from 'react-router-dom'
+import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 
 export default function NavBar() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { profile } = useAuth()
   const [menuOpen, setMenuOpen] = useState(false)
 
@@ -15,20 +16,17 @@ export default function NavBar() {
     } catch (e) {
       console.error('logout error', e)
     } finally {
-      // Supabase のセッションキー掃除
       try {
         Object.keys(localStorage).forEach((key) => {
           if (key.startsWith('sb-')) localStorage.removeItem(key)
         })
       } catch (_) {}
 
-      // Vercel の 404 回避のため、/login ではなく / に戻す
-      window.location.href = '/'
+      setMenuOpen(false)
+      navigate('/login', { replace: true })
     }
   }
 
-  // ログインページを使っていない想定だけど、
-  // もし /login を見せるときはナビを消しておく
   if (location.pathname === '/login') return null
 
   return (
@@ -58,19 +56,18 @@ export default function NavBar() {
           勤怠デモアプリ
         </div>
 
-        {/* モバイル用ハンバーガー */}
+        {/* スマホ用ハンバーガー（display は CSS に任せる） */}
         <button
           className="nav-hamburger"
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
+          aria-label="メニュー"
           style={{
-            display: 'none', // CSS で上書きして使う
             background: 'none',
             border: 'none',
             padding: '0.25rem',
             cursor: 'pointer',
           }}
-          aria-label="メニュー"
         >
           <span
             style={{
@@ -103,42 +100,57 @@ export default function NavBar() {
           />
         </button>
 
-        {/* 中央＋右：PC では横並び、SP ではドロワー内にまとめる */}
+        {/* メニューコンテナ（display も CSS 管理） */}
         <div
           className={`nav-menu-wrapper ${menuOpen ? 'open' : ''}`}
           style={{
-            display: 'flex',
             alignItems: 'center',
             gap: '0.75rem',
           }}
         >
-          {/* メニューリンク */}
+          {/* 中央リンク */}
           <div
             className="nav-links"
             style={{
-              display: 'flex',
-              gap: '0.75rem',
               alignItems: 'center',
+              gap: '0.75rem',
+              display: 'flex', // 縦 or 横は CSS の flex-direction で変える
             }}
           >
-            <NavLink to="/" style={linkStyle}>
+            <NavLink to="/" style={linkStyle} onClick={() => setMenuOpen(false)}>
               ダッシュボード
             </NavLink>
-            <NavLink to="/calendar" style={linkStyle}>
+            <NavLink
+              to="/calendar"
+              style={linkStyle}
+              onClick={() => setMenuOpen(false)}
+            >
               カレンダー
             </NavLink>
-            <NavLink to="/attendance" style={linkStyle}>
+            <NavLink
+              to="/attendance"
+              style={linkStyle}
+              onClick={() => setMenuOpen(false)}
+            >
               勤怠
             </NavLink>
-            <NavLink to="/requests" style={linkStyle}>
+            <NavLink
+              to="/requests"
+              style={linkStyle}
+              onClick={() => setMenuOpen(false)}
+            >
               申請
             </NavLink>
-            <NavLink to="/announcements" style={linkStyle}>
+            <NavLink
+              to="/announcements"
+              style={linkStyle}
+              onClick={() => setMenuOpen(false)}
+            >
               連絡事項
             </NavLink>
           </div>
 
-          {/* 右側：ユーザー名＋ログアウト */}
+          {/* 右：ユーザー名＋ログアウト */}
           <div
             className="nav-right"
             style={{
@@ -170,7 +182,7 @@ export default function NavBar() {
                 padding: '0.3rem 0.75rem',
                 fontSize: '0.8rem',
                 backgroundColor: '#f3f4f6',
-                border: '1px solid #d1d5db',
+                border: '1px solid '#d1d5db',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
