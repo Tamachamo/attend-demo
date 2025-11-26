@@ -1,3 +1,4 @@
+// src/pages/DashboardPage.jsx
 import React, { useEffect, useState } from 'react'
 import { format, startOfToday } from 'date-fns'
 import { useAuth } from '../context/AuthContext'
@@ -9,7 +10,6 @@ const ATTEND_STATUS_LABELS = {
   working: '勤務中',
   off: '勤務外',
   no_record: '未打刻',
-  // もし attendance_records.status に on_time / late / absent などがあればここに足す
   on_time: '定時出勤',
   late: '遅刻',
   absent: '欠勤',
@@ -39,7 +39,7 @@ export default function DashboardPage() {
   const [todayEvents, setTodayEvents] = useState([])
   const [todayLeaves, setTodayLeaves] = useState([])
   const [todayAnns, setTodayAnns] = useState([])
-  const [workingList, setWorkingList] = useState([]) // 本日出勤中のユーザー一覧
+  const [workingList, setWorkingList] = useState([])
 
   const today = startOfToday()
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -61,9 +61,9 @@ export default function DashboardPage() {
           .eq('work_date', todayStr)
           .maybeSingle()
 
-        if (attErr && attErr.code !== 'PGRST116') throw attErr // not found 以外
+        if (attErr && attErr.code !== 'PGRST116') throw attErr
 
-        // 今日の予定（全員分・カレンダーのモーダルと同じ中身）
+        // 今日の予定（全員分）
         const { data: ev, error: evErr } = await supabase
           .from('manual_events')
           .select('*, profiles(name)')
@@ -91,7 +91,7 @@ export default function DashboardPage() {
 
         if (anErr) throw anErr
 
-        // 今日の出勤中ユーザー一覧
+        // 今日の出勤中ユーザー
         const { data: working, error: workingErr } = await supabase
           .from('attendance_records')
           .select('*, profiles(name)')
@@ -130,8 +130,8 @@ export default function DashboardPage() {
     (attend ? '記録あり' : '未打刻')
 
   const timeLabel =
-    attend && attend.clock_in_at
-      ? `${attend.clock_in} 〜 ${attend.clock_out || '---'}`
+    attend && (attend.clock_in_at || attend.clock_out_at)
+      ? `${formatTime(attend.clock_in_at)} 〜 ${formatTime(attend.clock_out_at)}`
       : ''
 
   return (
@@ -166,6 +166,17 @@ export default function DashboardPage() {
         <p style={{ fontSize: '0.85rem', marginBottom: '0.1rem' }}>
           {format(today, 'yyyy/MM/dd')}（{'日月火水木金土'[today.getDay()]}）
         </p>
+        {profile?.name && (
+          <p
+            style={{
+              fontSize: '0.85rem',
+              color: '#6b7280',
+              marginBottom: '0.25rem',
+            }}
+          >
+            ユーザー：{profile.name}
+          </p>
+        )}
         <p style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.1rem' }}>
           状態：{statusLabel}
         </p>
@@ -230,7 +241,7 @@ export default function DashboardPage() {
                     >
                       出勤時刻{' '}
                       {w.clock_in_at
-                        ? format(new Date(w.clock_in), 'HH:mm')
+                        ? format(new Date(w.clock_in_at), 'HH:mm')
                         : '未記録'}
                     </div>
                   </div>
@@ -242,7 +253,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* 今日の予定・申請・連絡事項（カレンダーモーダルと同じ内容） */}
+      {/* 今日の予定・申請・連絡事項 */}
       <div
         style={{
           backgroundColor: '#ffffff',
@@ -330,13 +341,20 @@ export default function DashboardPage() {
   )
 }
 
+function formatTime(iso) {
+  if (!iso) return '---'
+  const d = new Date(iso)
+  const h = String(d.getHours()).padStart(2, '0')
+  const m = String(d.getMinutes()).padStart(2, '0')
+  return `${h}:${m}`
+}
+
 function timeRangeFromEvent(e) {
   if (!e.start_at) return ''
-  const d = new Date(e.start_at)
-  const s = format(d, 'HH:mm')
-  if (!e.end_at) return s
-  const e2 = new Date(e.end_at)
-  return `${s}〜${format(e2, 'HH:mm')}`
+  const start = format(new Date(e.start_at), 'HH:mm')
+  if (!e.end_at) return start
+  const end = format(new Date(e.end_at), 'HH:mm')
+  return `${start}〜${end}`
 }
 
 function timeRangeFromLeave(l) {
