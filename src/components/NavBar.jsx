@@ -4,178 +4,118 @@ import { NavLink, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 
-const linkBaseStyle = {
-  padding: '0.35rem 0.6rem',
-  borderRadius: '9999px',
-  fontSize: '0.85rem',
-  textDecoration: 'none',
-  border: '1px solid transparent',
-  whiteSpace: 'nowrap',
-}
-
-function navLinkStyle(isActive) {
-  if (isActive) {
-    return {
-      ...linkBaseStyle,
-      backgroundColor: '#111827',
-      color: '#ffffff',
-      borderColor: '#111827',
-    }
-  }
-  return {
-    ...linkBaseStyle,
-    backgroundColor: '#ffffff',
-    color: '#374151',
-    borderColor: '#e5e7eb',
-  }
-}
-
 export default function NavBar() {
   const location = useLocation()
   const { profile } = useAuth()
 
   const handleLogout = async () => {
     try {
-      // Supabase のセッション削除
       await supabase.auth.signOut()
     } catch (e) {
       console.error('logout error', e)
     } finally {
-      // Supabase が使っているローカルストレージのキーも消しておく
+      // sb- のキーを全削除（自動ログイン対策）
       try {
         Object.keys(localStorage).forEach((key) => {
           if (key.startsWith('sb-')) {
             localStorage.removeItem(key)
           }
         })
-      } catch (_e) {
-        // localStorage 触れない環境なら無視
-      }
+      } catch (e) {}
 
-      // 強制的にログインページへ
       window.location.href = '/login'
     }
   }
 
-  // ログインページでは NavBar を非表示にする（見た目も挙動もシンプルに）
-  if (location.pathname === '/login') {
-    return null
-  }
+  // ログインページではナビを非表示
+  if (location.pathname === '/login') return null
 
   return (
     <header
       style={{
-        width: '100%',
+        padding: '0.75rem 1rem',
+        backgroundColor: '#ffffff',
         borderBottom: '1px solid #e5e7eb',
-        backgroundColor: '#f9fafb',
       }}
     >
-      <div
+      <nav
         style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
           maxWidth: '960px',
           margin: '0 auto',
-          padding: '0.5rem 0.75rem',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: '0.75rem',
-          boxSizing: 'border-box',
         }}
       >
-        {/* 左：タイトル */}
+        {/* 左 ロゴ */}
         <div
           style={{
-            fontSize: '0.95rem',
+            fontSize: '1rem',
             fontWeight: 700,
             color: '#111827',
-            whiteSpace: 'nowrap',
           }}
         >
           勤怠デモアプリ
         </div>
 
-        {/* 中央：ナビ */}
-        <nav
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '0.35rem',
-            justifyContent: 'center',
-            flex: 1,
-          }}
-        >
-          <NavLink
-            to="/"
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            ダッシュボード
-          </NavLink>
-          <NavLink
-            to="/calendar"
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            カレンダー
-          </NavLink>
-          <NavLink
-            to="/attendance"
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            勤怠入力
-          </NavLink>
-          <NavLink
-            to="/requests"
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            申請一覧
-          </NavLink>
-          <NavLink
-            to="/announcements"
-            style={({ isActive }) => navLinkStyle(isActive)}
-          >
-            連絡事項
-          </NavLink>
-        </nav>
-
-        {/* 右：ユーザー名＋ログアウト */}
+        {/* 中央 メニュー */}
         <div
           style={{
             display: 'flex',
+            gap: '0.75rem',
             alignItems: 'center',
-            gap: '0.4rem',
-            whiteSpace: 'nowrap',
           }}
         >
+          <NavLink to="/" style={linkStyle}>
+            ダッシュボード
+          </NavLink>
+          <NavLink to="/calendar" style={linkStyle}>
+            カレンダー
+          </NavLink>
+          <NavLink to="/attendance" style={linkStyle}>
+            勤怠
+          </NavLink>
+          <NavLink to="/requests" style={linkStyle}>
+            申請
+          </NavLink>
+          <NavLink to="/announcements" style={linkStyle}>
+            連絡事項
+          </NavLink>
+        </div>
+
+        {/* 右：ユーザー名＋ログアウト */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
           {profile?.name && (
-            <span
-              style={{
-                fontSize: '0.8rem',
-                color: '#4b5563',
-                maxWidth: '8rem',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-              title={profile.name}
-            >
+            <span style={{ fontSize: '0.85rem', color: '#4b5563' }}>
               {profile.name}
             </span>
           )}
+
           <button
-            type="button"
             onClick={handleLogout}
             style={{
-              padding: '0.35rem 0.6rem',
-              borderRadius: '9999px',
-              border: '1px solid #e5e7eb',
-              backgroundColor: '#ffffff',
+              padding: '0.3rem 0.75rem',
               fontSize: '0.8rem',
+              backgroundColor: '#f3f4f6',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
               cursor: 'pointer',
-              whiteSpace: 'nowrap',
             }}
           >
             ログアウト
           </button>
         </div>
-      </div>
+      </nav>
     </header>
   )
 }
+
+const linkStyle = ({ isActive }) => ({
+  padding: '0.3rem 0.6rem',
+  textDecoration: 'none',
+  borderRadius: '6px',
+  backgroundColor: isActive ? '#111827' : '#ffffff',
+  color: isActive ? '#ffffff' : '#374151',
+  border: isActive ? '1px solid #111827' : '1px solid #d1d5db',
+  fontSize: '0.85rem',
+})
