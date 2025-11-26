@@ -52,23 +52,18 @@ export default function AttendancePage() {
 
   if (!user || loading) return <Loading />
 
-  function nowTimeStr() {
-    return format(new Date(), 'HH:mm')
-  }
-
-  function calcTotalMinutes(clockInStr, clockOutStr, breakMinutes = BREAK_MINUTES) {
-    if (!clockInStr || !clockOutStr) return null
-    const [sh, sm] = clockInStr.split(':').map((v) => parseInt(v, 10))
-    const [eh, em] = clockOutStr.split(':').map((v) => parseInt(v, 10))
-    const start = sh * 60 + sm
-    const end = eh * 60 + em
-    const diff = end - start - breakMinutes
+  function calcTotalMinutes(clockInIso, clockOutIso, breakMinutes = BREAK_MINUTES) {
+    if (!clockInIso || !clockOutIso) return null
+    const start = new Date(clockInIso)
+    const end = new Date(clockOutIso)
+    const diffMs = end.getTime() - start.getTime()
+    const diff = Math.floor(diffMs / 60000) - breakMinutes
     return diff > 0 ? diff : 0
   }
 
   async function handleClockIn() {
     if (!user) return
-    if (record?.clock_in) {
+    if (record?.clock_in_at) {
       setError('本日はすでに出勤が記録されています。')
       return
     }
@@ -77,7 +72,7 @@ export default function AttendancePage() {
     setError(null)
     setMessage('')
     try {
-      const time = nowTimeStr()
+      const nowIso = new Date().toISOString()
 
       if (!record) {
         // 新規レコード
@@ -86,8 +81,8 @@ export default function AttendancePage() {
           .insert({
             user_id: user.id,
             work_date: todayStr,
-            clock_in: time,
-            clock_out: null,
+            clock_in_at: nowIso,
+            clock_out_at: null,
             break_minutes: BREAK_MINUTES,
             total_minutes: null,
             status: 'working',
@@ -98,11 +93,11 @@ export default function AttendancePage() {
         if (error) throw error
         setRecord(data)
       } else {
-        // 既存レコード更新（clock_in がまだ無いパターン）
+        // 既存レコード更新（clock_in_at がまだ無いパターン）
         const { data, error } = await supabase
           .from('attendance_records')
           .update({
-            clock_in: time,
+            clock_in_at: nowIso,
             break_minutes: BREAK_MINUTES,
             status: 'working',
           })
@@ -125,11 +120,11 @@ export default function AttendancePage() {
 
   async function handleClockOut() {
     if (!user) return
-    if (!record?.clock_in) {
+    if (!record?.clock_in_at) {
       setError('出勤が記録されていません。')
       return
     }
-    if (record?.clock_out) {
+    if (record?.clock_out_at) {
       setError('本日はすでに退勤が記録されています。')
       return
     }
@@ -138,15 +133,19 @@ export default function AttendancePage() {
     setError(null)
     setMessage('')
     try {
-      const time = nowTimeStr()
-      const totalMinutes = calcTotalMinutes(record.clock_in, time, record.break_minutes)
+      const nowIso = new Date().toISOString()
+      const totalMinutes = calcTotalMinutes(
+        record.clock_in_at,
+        nowIso,
+        record.break_minutes ?? BREAK_MINUTES,
+      )
 
       const { data, error } = await supabase
         .from('attendance_records')
         .update({
-          clock_out: time,
+          clock_out_at: nowIso,
           total_minutes: totalMinutes,
-          status: 'off', // ダッシュボード側のラベルで「勤務外」にする
+          status: 'off', // ダッシュボード側で「勤務外」と表示
         })
         .eq('id', record.id)
         .select('*')
@@ -163,14 +162,18 @@ export default function AttendancePage() {
     }
   }
 
-  function formatWorkTime(rec) {
-    if (!rec?.clock_in) return ''
-    const start = rec.clock_in
-    const end = rec.clock_out || '---'
-    return `${start} 〜 ${end}`
+  function formatTime(iso) {
+    if (!iso) return '-'
+    const d = new Date(iso)
+    const h = String(d.getHours()).padStart(2, '0')
+    const m = String(d.getMinutes()).padStart(2, '0')
+    return `${h}:${m}`
   }
 
-  const workTimeLabel = formatWorkTime(record)
+  const workTimeLabel =
+    record?.clock_in_at || record?.clock_out_at
+      ? `${formatTime(record?.clock_in_at)} 〜 ${formatTime(record?.clock_out_at)}`
+      : ''
 
   return (
     <div>
@@ -201,16 +204,16 @@ export default function AttendancePage() {
         >
           <button
             onClick={handleClockIn}
-            disabled={saving || !!record?.clock_in}
+            disabled={saving || !!record?.clock_in_at}
             style={{
               padding: '0.6rem 1.2rem',
               borderRadius: '9999px',
               border: 'none',
-              backgroundColor: record?.clock_in ? '#d1d5db' : '#fbbf24',
+              backgroundColor: record?.clock_in_at ? '#d1d5db' : '#fbbf24',
               color: '#111827',
               fontWeight: 600,
               cursor:
-                saving || record?.clock_in ? 'not-allowed' : 'pointer',
+                saving || record?.clock_in_at ? 'not-allowed' : 'pointer',
             }}
           >
             出勤
@@ -218,17 +221,19 @@ export default function AttendancePage() {
 
           <button
             onClick={handleClockOut}
-            disabled={saving || !record?.clock_in || !!record?.clock_out}
+            disabled={saving || !record?.clock_in_at || !!record?.clock_out_at}
             style={{
               padding: '0.6rem 1.2rem',
               borderRadius: '9999px',
               border: 'none',
               backgroundColor:
-                !record?.clock_in || record?.clock_out ? '#d1d5db' : '#3b82f6',
+                !record?.clock_in_at || record?.clock_out_at
+                  ? '#d1d5db'
+                  : '#3b82f6',
               color: '#ffffff',
               fontWeight: 600,
               cursor:
-                !record?.clock_in || record?.clock_out || saving
+                !record?.clock_in_at || record?.clock_out_at || saving
                   ? 'not-allowed'
                   : 'pointer',
             }}
@@ -253,7 +258,7 @@ export default function AttendancePage() {
             }}
           >
             <span>出勤時刻</span>
-            <span>{record?.clock_in || '-'}</span>
+            <span>{formatTime(record?.clock_in_at)}</span>
           </div>
           <div
             style={{
@@ -263,7 +268,7 @@ export default function AttendancePage() {
             }}
           >
             <span>退勤時刻</span>
-            <span>{record?.clock_out || '-'}</span>
+            <span>{formatTime(record?.clock_out_at)}</span>
           </div>
           <div
             style={{
@@ -291,6 +296,18 @@ export default function AttendancePage() {
             </span>
           </div>
         </div>
+
+        {workTimeLabel && (
+          <p
+            style={{
+              marginTop: '0.5rem',
+              fontSize: '0.85rem',
+              color: '#4b5563',
+            }}
+          >
+            勤務時間：{workTimeLabel}
+          </p>
+        )}
 
         {message && (
           <p
