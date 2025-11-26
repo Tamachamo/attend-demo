@@ -182,7 +182,7 @@ export default function NavBar() {
                 padding: '0.3rem 0.75rem',
                 fontSize: '0.8rem',
                 backgroundColor: '#f3f4f6',
-                border: '1px solid '#d1d5db',
+                border: '1px solid #d1d5db',
                 borderRadius: '6px',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
