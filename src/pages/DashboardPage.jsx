@@ -96,9 +96,9 @@ export default function DashboardPage() {
           .from('attendance_records')
           .select('*, profiles(name)')
           .eq('work_date', todayStr)
-          .not('clock_in', 'is', null)
-          .is('clock_out', null)
-          .order('clock_in', { ascending: true })
+          .not('clock_in_at', 'is', null)
+          .is('clock_out_at', null)
+          .order('clock_in_at', { ascending: true })
 
         if (workingErr) throw workingErr
 
@@ -130,7 +130,7 @@ export default function DashboardPage() {
     (attend ? '記録あり' : '未打刻')
 
   const timeLabel =
-    attend && attend.clock_in
+    attend && attend.clock_in_at
       ? `${attend.clock_in} 〜 ${attend.clock_out || '---'}`
       : ''
 
@@ -229,7 +229,7 @@ export default function DashboardPage() {
                       }}
                     >
                       出勤時刻{' '}
-                      {w.clock_in
+                      {w.clock_in_at
                         ? format(new Date(w.clock_in), 'HH:mm')
                         : '未記録'}
                     </div>
