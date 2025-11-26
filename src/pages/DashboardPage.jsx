@@ -39,6 +39,7 @@ export default function DashboardPage() {
   const [todayEvents, setTodayEvents] = useState([])
   const [todayLeaves, setTodayLeaves] = useState([])
   const [todayAnns, setTodayAnns] = useState([])
+  const [workingList, setWorkingList] = useState([]) // 本日出勤中のユーザー一覧
 
   const today = startOfToday()
   const todayStr = format(today, 'yyyy-MM-dd')
@@ -90,11 +91,23 @@ export default function DashboardPage() {
 
         if (anErr) throw anErr
 
+        // 今日の出勤中ユーザー一覧
+        const { data: working, error: workingErr } = await supabase
+          .from('attendance_records')
+          .select('*, profiles(name)')
+          .eq('work_date', todayStr)
+          .not('clock_in', 'is', null)
+          .is('clock_out', null)
+          .order('clock_in', { ascending: true })
+
+        if (workingErr) throw workingErr
+
         if (!cancelled) {
           setAttend(att ?? null)
           setTodayEvents(ev || [])
           setTodayLeaves(lr || [])
           setTodayAnns(an || [])
+          setWorkingList(working || [])
         }
       } catch (e) {
         console.error('dashboard load error', e)
@@ -132,7 +145,7 @@ export default function DashboardPage() {
 
       <ErrorMessage message={error} />
 
-      {/* 勤怠ステータス */}
+      {/* 今日の勤怠（自分） */}
       <div
         style={{
           backgroundColor: '#ffffff',
@@ -158,6 +171,74 @@ export default function DashboardPage() {
         </p>
         {timeLabel && (
           <p style={{ fontSize: '0.85rem', color: '#4b5563' }}>時間：{timeLabel}</p>
+        )}
+      </div>
+
+      {/* 本日の出勤中リスト */}
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '0.75rem',
+          padding: '0.75rem',
+          marginBottom: '0.75rem',
+        }}
+      >
+        <h3
+          style={{
+            fontSize: '0.95rem',
+            fontWeight: 600,
+            marginBottom: '0.4rem',
+          }}
+        >
+          本日の出勤中リスト
+        </h3>
+        <p style={{ fontSize: '0.85rem', marginBottom: '0.4rem', color: '#6b7280' }}>
+          対象日：{format(today, 'yyyy/MM/dd')}
+        </p>
+
+        {workingList.length === 0 ? (
+          <p style={{ fontSize: '0.85rem', color: '#6b7280' }}>
+            現在出勤中のユーザーはいません。
+          </p>
+        ) : (
+          <ul style={listStyle}>
+            {workingList.map((w) => (
+              <li key={w.id} style={listItemStyle}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '0.5rem',
+                  }}
+                >
+                  <div>
+                    <div
+                      style={{
+                        fontSize: '0.9rem',
+                        fontWeight: 600,
+                        color: '#111827',
+                      }}
+                    >
+                      {w.profiles?.name ?? 'ユーザー'}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: '0.8rem',
+                        color: '#6b7280',
+                      }}
+                    >
+                      出勤時刻{' '}
+                      {w.clock_in
+                        ? format(new Date(w.clock_in), 'HH:mm')
+                        : '未記録'}
+                    </div>
+                  </div>
+                  <span style={badgeStyle}>勤務中</span>
+                </div>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
 
@@ -295,4 +376,12 @@ const listStyle = {
 const listItemStyle = {
   padding: '0.4rem 0',
   borderBottom: '1px solid #f3f4f6',
+}
+
+const badgeStyle = {
+  fontSize: '0.8rem',
+  padding: '0.2rem 0.5rem',
+  borderRadius: '9999px',
+  backgroundColor: '#dcfce7',
+  color: '#166534',
 }
